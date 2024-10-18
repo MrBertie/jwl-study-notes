@@ -17,5 +17,5 @@ You will need to go to the *Plugin Settings* page in Obsidian and enable the plu
 3. Make sure the "Vault location" folder name is correct; this isthe folder in your vault where you want to store your bible study notes
 4. Place the text file into this folder, and make sure the file name matches the "Exported file name" setting (including the extension, e.g. "jwlnotes.txt")
 5. Click the ▷Import notes◁ button to start the import process. 
-  a. ⚠️ Existing study notes in this folder with the same book name will be overwritten!
+   1. ⚠️ Existing study notes in this folder with the same book name will be overwritten!
 6. If all goes well then open the folder and check that the finished study notes are correct.
