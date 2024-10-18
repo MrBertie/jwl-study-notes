@@ -1,12 +1,13 @@
 /**
  * JWL Study Notes - Obsidian Plugin
  * =================================
- * Create Bible study note pages from a JWL Manager export file (csv format)
- * One page per Bible book, in verse order, heading per chapter
+ * Create Bible study note pages from a JWL Manager export file (text format only)
+ * Creates one page per Bible book, in verse order, new heading per chapter
  *
  */
 
 const { App, Plugin, Setting, PluginSettingTab, Modal, normalizePath } = require('obsidian');
+
 const DEFAULT_SETTINGS = {
   sourceFile: 'jwlnotes.txt',
   workingFolder: 'Bible',
@@ -37,7 +38,7 @@ class JWLStudyNotesPlugin extends Plugin {
     this.addSettingTab(new JWLStudyNotesSettingTab(this.app, this));
 
     console.log('%c' + this.manifest.name + ' ' + this.manifest.version +
-    ' loaded', 'background-color: darkgreen; padding:4px; border-radius:4px');
+      ' loaded', 'background-color: darkgreen; padding:4px; border-radius:4px');
   }
 
   onunload() {}
@@ -53,25 +54,24 @@ class JWLStudyNotesPlugin extends Plugin {
 
 class Lib {
   /**
-   *
+   * The main functionality
    * @param {App} app
    * @param {Plugin} plugin
-   * @param {Function} notice
+   * @param {Function} notice A shared Notice instance for messages
    */
   static async createStudyNotes(app, plugin, notice) {
     const { readFile } = require('fs').promises;
+    // Path to the source text file exported from JWL Mananger app
     const location = plugin.settings.workingFolder + '/' + plugin.settings.sourceFile;
-    const full_path = app.vault.adapter.getFullPath(location);
-
-    const data = await readFile(full_path, { encoding: 'utf8' });
+    const fullPath = app.vault.adapter.getFullPath(location);
+    const data = await readFile(fullPath, { encoding: 'utf8' });
     let arr = data.split('\r\n');
-    let have_entry = false;
+    let haveEntry = false;
     let entry = new Map();
-    let note = '';
     let results = [];
-    const APPENDIX = 67;
+    const APPENDIX = 67; // Revelation = 66
 
-    for (line of arr) {
+    for (let line of arr) {
       if (line == '==={END}===') continue;
 
       // look for header rows first
@@ -92,17 +92,17 @@ class Lib {
           entry.set('sort', APPENDIX + entry.get('DOC').substring(0, 5)); // use "67..." for other notes
           entry.set('BK', APPENDIX);
         }
-        have_entry = true;
+        haveEntry = true;
 
         // now consider note rows
-      } else if (have_entry) {
+      } else if (haveEntry) {
         // first line is considered the TITLE
         if (!entry.has('NOTE')) {
           entry.set('TITLE', line);
           entry.set('NOTE', '');
         } else {
           // Add any other rows to the NOTE
-          note = entry.get('NOTE') !== '' ? entry.get('NOTE') + '\n' + line : line;
+          const note = entry.get('NOTE') !== '' ? entry.get('NOTE') + '\n' + line : line;
           entry.set('NOTE', note);
         }
       }
@@ -117,50 +117,45 @@ class Lib {
       if (refA == refB) return 0;
     });
 
-    let book = '';
-    let book_no = 0;
-    let chap = '';
-    let verse = '';
-    let content = '';
-    let path = '';
     const last = results.length - 1;
-
+    let content = '';
+    
     // one row per entry: BK CH VS Reference etc
     for (let [i, entry] of results.entries()) {
-      book_no = Number(entry.get('BK'));
-      book = Book[book_no - 1];
+      const bookNo = Number(entry.get('BK'));
+      const book = Book[bookNo - 1];
 
       // part of the appendix?
-      if (book_no === APPENDIX) {
+      if (bookNo === APPENDIX) {
         content += `**${entry.get('HEADING')}**\n${entry.get('NOTE')}\n\n`;
       } else {
         // have we started a new chapter?
-        chap = entry.get('CH');
-        prev_chap = i > 0 ? results[i - 1].get('CH') : '';
-        if (chap !== prev_chap) {
+        const chap = entry.get('CH');
+        const prevChap = i > 0 ? results[i - 1].get('CH') : '';
+        if (chap !== prevChap) {
           content += `# ${book} ${chap} \n\n`;
         }
         // keep chapter notes at top
-        verse = `${book} ${chap}:${entry.get('VS') ?? '—'}`;
-        content += `**${verse}** "${entry.get('TITLE')}"\n${entry.get('NOTE')}\n\n`;
+        const verse = `${book} ${chap}:${entry.get('VS') ?? '—'}`;
+        content += `**${verse}** "*${entry.get('TITLE')}*"\n${entry.get('NOTE')}\n\n`;
       }
 
       // have we finished a bible book?
       // check for last row also
-      next_book_no = i < last ? Number(results[i + 1].get('BK')) : '';
-      if (book_no !== next_book_no) {
-        path =
+      const nextBookNo = i < last ? Number(results[i + 1].get('BK')) : '';
+      if (bookNo !== nextBookNo) {
+        let path =
           plugin.settings.workingFolder +
           '/' +
-          book_no.toString().padStart(2, '00') +
+          bookNo.toString().padStart(2, '00') +
           ' ' +
           book +
           '.md';
         path = normalizePath(path);
-        if (book_no === APPENDIX) {
-          content = `# ${book_no} ${book}\n\n${content}`;
+        if (bookNo === APPENDIX) {
+          content = `# ${bookNo} ${book}\n\n${content}`;
         } else {
-          content = this.bookInfo(book_no) + '\n' + content;
+          content = this.bookInfo(bookNo) + '\n' + content;
         }
         try {
           await app.vault.adapter.write(path, content);
@@ -199,7 +194,23 @@ class JWLStudyNotesModal extends Modal {
     let { contentEl } = this;
     const decal = '🟥🟨🟩 ';
 
-    new Setting(contentEl).setName(decal + 'JWL Study Notes').setHeading();
+    const frag = createEl('ul');
+    const lines = [
+      'Use the JWL Manager app to export all your bible study notes as a text file',
+      'Set the working folder below; this is the folder in your vault where want to store your bible study notes',
+      'Place the exported text file into the working folder, and make sure the file name matches the setting below',
+      'Click the ▷Import notes◁ button to start the import process',
+      'Open the working folder in your vault and check that the finished study notes are present and correct',
+    ];
+    for (const line of lines) {
+      const p = createEl('li', {text: line });
+      frag.append(p);
+    }
+
+    new Setting(contentEl)
+      .setName(decal + 'JWL Study Notes')
+      .setDesc(frag)
+      .setHeading();
 
     new Setting(contentEl)
       .setName('Location of working folder')
@@ -240,7 +251,8 @@ class JWLStudyNotesModal extends Modal {
               console.info('JWL Study Notes | Created page: ' + path);
             }).then(() => {
               ntc.hide();
-              new Notice(decal + 'Bible study notes successfully imported to chosen folder', 3000);
+              const folder = this.plugin.settings.workingFolder;
+              new Notice(decal + 'Bible study notes successfully imported to vault folder: "' + folder + '"', 3000);
               console.timeEnd('JWL Study Notes | Import');
             });
             this.close();
@@ -271,7 +283,6 @@ class JWLStudyNotesSettingTab extends PluginSettingTab {
 
     containerEl.empty();
 
-    new Setting(containerEl).setName('JWL Study Notes').setHeading();
     new Setting(containerEl)
       .setName('Location for study notes')
       .setDesc('Bible notes by book and the exported text file will be kept here')
