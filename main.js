@@ -86,10 +86,8 @@ class Lib {
           .split('}{')
           .map((e) => e.split('='))
           .forEach((e) => entry.set(e[0], e[1]));
-        if (entry.has('Reference')) {
-          entry.set('sort', entry.get('Reference').substring(0, 7));
-        } else {
-          entry.set('sort', APPENDIX + entry.get('DOC').substring(0, 5)); // use "67..." for other notes
+        if (!entry.has('Reference')) {
+          entry.set('Reference', APPENDIX + entry.get('DOC').substring(0, 6)); // use "67..." for other notes
           entry.set('BK', APPENDIX);
         }
         haveEntry = true;
@@ -110,8 +108,8 @@ class Lib {
 
     // sort by the wt bible reference =>'bbcccvvv'
     results.sort((a, b) => {
-      const refA = a.get('sort');
-      const refB = b.get('sort');
+      const refA = a.get('Reference');
+      const refB = b.get('Reference');
       if (refA < refB) return -1;
       if (refA > refB) return 1;
       if (refA == refB) return 0;
