@@ -64,8 +64,14 @@ class Lib {
     // Path to the source text file exported from JWL Mananger app
     const location = plugin.settings.workingFolder + '/' + plugin.settings.sourceFile;
     const fullPath = app.vault.adapter.getFullPath(location);
-    const data = await readFile(fullPath, { encoding: 'utf8' });
-    let arr = data.split('\r\n');
+    let data = '';
+    try {
+      data = await readFile(fullPath, { encoding: 'utf8' });
+      console.log(data);
+    } catch(error) {
+      console.log(error);
+    }
+    let arr = data.split(/\r?\n/g); // allow for Linux and Mac too!
     let haveEntry = false;
     let entry = new Map();
     let results = [];
