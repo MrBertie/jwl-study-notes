@@ -1,7 +1,7 @@
 {
 	"id": "jwl-study-notes",
 	"name": "JWL Study Notes",
-	"version": "0.2.2",
+	"version": "0.2.3",
 	"minAppVersion": "0.15.0",
 	"description": "Create Bible study note pages from a JWL Manager export file in text format. One page per Bible book, in verse order, new heading per chapter",
 	"author": "MrBertie",

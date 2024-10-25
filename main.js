@@ -6,7 +6,7 @@
  *
  */
 
-const { App, Plugin, Setting, PluginSettingTab, Modal, normalizePath } = require('obsidian');
+const { Plugin, Setting, PluginSettingTab, Modal, normalizePath } = require('obsidian');
 
 const DEFAULT_SETTINGS = {
   sourceFile: 'jwlnotes.txt',
@@ -37,8 +37,9 @@ class JWLStudyNotesPlugin extends Plugin {
 
     this.addSettingTab(new JWLStudyNotesSettingTab(this.app, this));
 
-    console.log('%c' + this.manifest.name + ' ' + this.manifest.version +
-      ' loaded', 'background-color: darkgreen; padding:4px; border-radius:4px');
+    // biome-ignore lint: Loading indicator, runs once only; // ⚠️
+    console.log(`%c${this.manifest.name} ${this.manifest.version} loaded`, 
+      'background-color: darkgreen; padding:4px; border-radius:4px');
   }
 
   onunload() {}
@@ -50,35 +51,32 @@ class JWLStudyNotesPlugin extends Plugin {
   async saveSettings() {
     await this.saveData(this.settings);
   }
-}
 
-class Lib {
   /**
    * The main functionality
-   * @param {App} app
-   * @param {Plugin} plugin
    * @param {Function} notice A shared Notice instance for messages
    */
-  static async createStudyNotes(app, plugin, notice) {
+  async createStudyNotes(notice) {
     const { readFile } = require('fs').promises;
     // Path to the source text file exported from JWL Mananger app
-    const location = plugin.settings.workingFolder + '/' + plugin.settings.sourceFile;
-    const fullPath = app.vault.adapter.getFullPath(location);
+    const location = `${this.settings.workingFolder}/${this.settings.sourceFile}`;
+    const fullPath = this.app.vault.adapter.getFullPath(location);
     let data = '';
     try {
       data = await readFile(fullPath, { encoding: 'utf8' });
-      console.log(data);
     } catch(error) {
-      console.log(error);
+      // biome-ignore lint: ; ⚠️
+      console.log(`Can't open file: ${fullPath} [${error}`);
+      return null;
     }
-    let arr = data.split(/\r?\n/g); // allow for Linux and Mac too!
+    const arr = data.split(/\r?\n/g); // allow for Linux and Mac too!
     let haveEntry = false;
     let entry = new Map();
-    let results = [];
+    const results = [];
     const APPENDIX = 67; // Revelation = 66
 
-    for (let line of arr) {
-      if (line == '==={END}===') continue;
+    for (const line of arr) {
+      if (line === '==={END}===') continue;
 
       // look for header rows first
       if (line.startsWith('==={')) {
@@ -87,6 +85,7 @@ class Lib {
           results.push(entry);
         }
         entry = new Map();
+        // biome-ignore lint: prefer the inline functional style here
         line
           .slice(4, -4)
           .split('}{')
@@ -106,7 +105,7 @@ class Lib {
           entry.set('NOTE', '');
         } else {
           // Add any other rows to the NOTE
-          const note = entry.get('NOTE') !== '' ? entry.get('NOTE') + '\n' + line : line;
+          const note = entry.get('NOTE') !== '' ? `${entry.get('NOTE')}\n${line}` : line;
           entry.set('NOTE', note);
         }
       }
@@ -118,14 +117,14 @@ class Lib {
       const refB = b.get('Reference');
       if (refA < refB) return -1;
       if (refA > refB) return 1;
-      if (refA == refB) return 0;
+      if (refA === refB) return 0;
     });
 
     const last = results.length - 1;
     let content = '';
     
     // one row per entry: BK CH VS Reference etc
-    for (let [i, entry] of results.entries()) {
+    for (const [i, entry] of results.entries()) {
       const bookNo = Number(entry.get('BK'));
       const book = Book[bookNo - 1];
 
@@ -149,27 +148,24 @@ class Lib {
       const nextBookNo = i < last ? Number(results[i + 1].get('BK')) : '';
       if (bookNo !== nextBookNo) {
         let path =
-          plugin.settings.workingFolder +
-          '/' +
-          bookNo.toString().padStart(2, '00') +
-          ' ' +
-          book +
-          '.md';
+          `${this.settings.workingFolder}/${bookNo.toString().padStart(2, '00')} ${book}.md`;
         path = normalizePath(path);
         if (bookNo === APPENDIX) {
           content = `# ${bookNo} ${book}\n\n${content}`;
         } else {
-          content = this.bookInfo(bookNo) + '\n' + content;
+          content = `${this._bookInfo(bookNo)}\n${content}`;
         }
         try {
-          await app.vault.adapter.write(path, content);
+          await this.app.vault.adapter.write(path, content);
           notice(path); // function to show path in ongoing Notice
           content = '';
         } catch (error) {
-          console.log(error);
+          // biome-ignore lint: ; // ⚠️
+          console.log(`Could save to: ${path} [${error}`);
         }
       }
     }
+    return "Success!";
   }
 
   /**
@@ -177,9 +173,9 @@ class Lib {
    * @param {number} book_no
    * @param {string}
    */
-  static bookInfo(book_no) {
+  _bookInfo(book_no) {
     const info = TOC[book_no - 1].split(' | ');
-    let result = `FIELD | INFO \n---- | ---- \n`;
+    let result = 'FIELD | INFO \n---- | ---- \n';
     TOCHeader.forEach((key, i) => {
       const val = info[i];
       result += `${key} | ${val}\n`;
@@ -195,7 +191,7 @@ class JWLStudyNotesModal extends Modal {
   }
 
   onOpen() {
-    let { contentEl } = this;
+    const { contentEl } = this;
     const decal = '🟥🟨🟩 ';
 
     const frag = createEl('ul');
@@ -212,7 +208,7 @@ class JWLStudyNotesModal extends Modal {
     }
 
     new Setting(contentEl)
-      .setName(decal + 'JWL Study Notes')
+      .setName(`${decal}JWL Study Notes`)
       .setDesc(frag)
       .setHeading();
 
@@ -249,14 +245,14 @@ class JWLStudyNotesModal extends Modal {
           .setCta()
           .onClick(() => {
             console.time('JWL Study Notes | Import');
-            let ntc = new Notice(decal + 'Started importing JWL Study Notes...');
-            Lib.createStudyNotes(this.app, this.plugin, (path) => {
-              ntc.setMessage(decal + 'JWL Study Notes | ' + path);
-              console.info('JWL Study Notes | Created page: ' + path);
+            const ntc = new Notice(`${decal}Started importing JWL Study Notes...`);
+            this.plugin.createStudyNotes((path) => {
+              ntc.setMessage(`${decal}JWL Study Notes | ${path}`);
+              console.info(`JWL Study Notes | Created page: ${path}`);
             }).then(() => {
               ntc.hide();
               const folder = this.plugin.settings.workingFolder;
-              new Notice(decal + 'Bible study notes successfully imported to vault folder: "' + folder + '"', 3000);
+              new Notice(`${decal}Bible study notes successfully imported to vault folder: "${folder}"`, 3000);
               console.timeEnd('JWL Study Notes | Import');
             });
             this.close();
@@ -271,7 +267,7 @@ class JWLStudyNotesModal extends Modal {
   }
 
   onClose() {
-    let { contentEl } = this;
+    const { contentEl } = this;
     contentEl.empty();
   }
 }
